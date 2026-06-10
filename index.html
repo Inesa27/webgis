@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web GIS Multi-Layer Editor</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; background-color: #1b2631; }
+        
+        .top-bar { background: linear-gradient(90deg, #7c3aed, #5b21b6); color: white; padding: 12px 15px; font-size: 14px; font-weight: bold; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; }
+        .header-controls { background: #0f172a; color: white; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; border-bottom: 1px solid #334155; }
+        #map { height: calc(100vh - 90px); width: 100%; background: #e2e8f0; z-index: 1; }
+
+        .btn-header { background: #1e293b; border: 1px solid #334155; padding: 8px 14px; border-radius: 4px; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px; font-size: 13px; }
+        .btn-header:hover { background: #334155; }
+        .btn-blue { background-color: #2563eb; border-color: #1d4ed8; } .btn-blue:hover { background-color: #1d4ed8; }
+
+        .dropdown { position: relative; display: inline-block; }
+        .dropdown-content { display: none; position: absolute; background-color: #1e293b; min-width: 220px; box-shadow: 0px 8px 16px rgba(0,0,0,0.7); z-index: 3000; border-radius: 5px; overflow: hidden; top: 100%; left: 0; margin-top: 5px; border: 1px solid #38bdf8; }
+        .dropdown-content a { color: white; padding: 12px 15px; text-decoration: none; display: block; font-size: 13px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: 0.2s; }
+        .dropdown-content a:hover { background-color: #334155; padding-left: 20px; border-left: 4px solid #38bdf8; }
+        .dropdown-content.show { display: block; }
+
+        /* Panel koordinat kecil dan mepet kiri bawah */
+        #koordinat-panel { position: absolute; bottom: 5px; left: 5px; background: transparent; border: none; color: #000; padding: 2px 4px; border-radius: 0; font-family: monospace; font-size: 10px; z-index: 1000; box-shadow: none; font-weight: 600; }
+
+        /* Lebar TOC diperkecil untuk kompak */
+        #toc-sidebar { position: absolute; top: 90px; left: 0; width: 240px; max-height: calc(100vh - 130px); background: linear-gradient(180deg, #0f1419 0%, #111c24 100%); border-radius: 0 6px 6px 0; border: 1px solid #1e3a3a; border-left: none; z-index: 1000; color: white; overflow-y: auto; display: block; box-shadow: 2px 2px 10px rgba(0,0,0,0.6); }
+        .toc-header { padding: 8px 10px; background: linear-gradient(90deg, #1a252f, #0f1419); font-weight: bold; border-bottom: 1px solid #1e3a3a; display: flex; align-items: center; gap: 5px; color: #4dd0e1; position: sticky; top: 0; z-index: 2; font-size: 12px; border-top-right-radius: 6px; }
+        .toc-card { margin: 5px; background: linear-gradient(135deg, #0f1419 0%, #1a252f 100%); border-radius: 5px; border: 1px solid #1e3a3a; padding: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
+        .toc-card-title { font-size: 10px; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center; gap: 3px; color: #e8f8f5; }
+        
+        .toc-controls { display: flex; gap: 3px; margin-bottom: 5px; }
+        .btn-toc-action { flex: 1; border: none; color: white; padding: 4px 3px; font-size: 9px; font-weight: bold; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 2px; transition: 0.2s; }
+        .btn-hide { background: #e74c3c; } 
+        .btn-zoom { background: #2980b9; }
+        .btn-style { background: #9b59b6; }
+        .btn-toc-action:hover { opacity: 0.85; transform: scale(1.02); }
+
+        .simbol-container { display: flex; align-items: center; gap: 3px; font-size: 9px; margin-bottom: 4px; color: #b2dfdb; }
+        .color-box { width: 10px; height: 10px; border-radius: 1px; border: 1px solid rgba(255,255,255,0.2); }
+        
+        .toc-slider-container { font-size: 8px; color: #80cbc4; margin-top: 3px; }
+        .slider { width: 100%; margin-top: 2px; height: 3px; border-radius: 2px; background: #1e3a3a; outline: none; accent-color: #4dd0e1; cursor: pointer; }
+
+        /* FLOATING TOOLBAR BAWAH - Dengan nama label */
+        #floating-toolbar { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; z-index: 1000; flex-wrap: wrap; justify-content: center; max-width: 90%; }
+        .btn-float { background: rgba(30, 41, 59, 0.85); border: 1px solid rgba(52, 211, 153, 0.4); color: white; width: 48px; height: 52px; border-radius: 5px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; transition: 0.3s; box-shadow: 0 2px 6px rgba(0,0,0,0.4); backdrop-filter: blur(10px); }
+        .btn-float:hover { background: rgba(56, 189, 248, 0.9); border-color: #38bdf8; transform: translateY(-2px); box-shadow: 0 2px 8px rgba(56, 189, 248, 0.3); }
+        .btn-float .icon { font-size: 18px; line-height: 1; }
+        .btn-float .label { font-size: 7px; font-weight: 600; text-align: center; line-height: 1; width: 100%; }
+
+        .modal-overlay { display: none; position: fixed; z-index: 4000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
+        .modal-box { background: #1e293b; margin: 8% auto; width: 400px; border-radius: 8px; border: 1px solid #f59e0b; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.7); overflow: hidden; }
+        .modal-box-header { display: flex; justify-content: space-between; padding: 15px; border-bottom: 1px solid #334155; font-weight: bold; }
+        .modal-box-body { padding: 20px; font-size: 13px; }
+        .modal-input { width: 100%; padding: 8px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 4px; margin-top: 5px; margin-bottom: 15px; box-sizing: border-box; }
+        .modal-btn { padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; color: white; width: 100%; }
+
+        .modal-sql { background: #0f172a; margin: 3% auto; padding: 20px; width: 85%; border-radius: 8px; border: 1px solid #1e293b; color: white; }
+        .btn-query-nav { background: transparent; border: 1px solid #38bdf8; color: #38bdf8; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 5px; margin-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 8px; border-bottom: 1px solid #1e293b; text-align: left; font-size: 12px; }
+        th { background: #1e293b; color: #38bdf8; }
+        
+        .side-panel { position: absolute; bottom: 30px; right: 10px; z-index: 1000; background: #1b2631; color: white; padding: 15px; border-radius: 8px; width: 220px; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.5);}
+        #route-panel { border: 1px solid #38bdf8; }
+        #distance-panel { border: 1px solid #c084fc; }
+        .cursor-crosshair { cursor: crosshair !important; } .cursor-crosshair .leaflet-interactive { cursor: crosshair !important; }
+        
+        .leaflet-popup-content-wrapper { background: rgba(255,255,255,0.95); border-radius: 8px; box-shadow: 0 3px 14px rgba(0,0,0,0.4); }
+        .leaflet-popup-content { margin: 10px; line-height: 1.4; font-size: 12px; color: #333; max-height: 200px; overflow-y: auto; }
+        .popup-table { width: 100%; border-collapse: collapse; }
+        .popup-table td { padding: 3px 5px; border-bottom: 1px solid #ddd; }
+        .popup-table td:first-child { font-weight: bold; width: 40%; }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    🗺️ WebGIS : Rangga Paksi Dewangga | 2415071079
+</div>
+
+<div class="header-controls">
+    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <button id="btnToggleToc" class="btn-header btn-blue" style="font-size: 16px; padding: 4px 12px;" title="Table of Contents">≡</button>
+
+        <div style="display:flex; align-items:center; gap:5px; background: #1e293b; padding: 2px 8px; border-radius: 4px; border: 1px solid #334155;">
+            <label style="color: #64b5f6; font-weight: bold;">Simpan ke:</label>
+            <select id="targetTabel" style="padding: 4px; border-radius: 4px; background: #1e293b; color: white; border: none; outline: none; cursor: pointer; font-weight: bold;">
+                <option value="jalan">🛣️ Jalan</option>
+                <option value="landuse">🟩 Landuse</option>
+                <option value="tower">🗼 Tower</option>
+                <option value="wilayah">🗺️ Wilayah</option>
+                <option value="shp_titik">📍 SHP Titik</option>
+                <option value="shp_garis">🛣️ SHP Garis</option>
+                <option value="shp_poligon">🏞️ SHP Poligon (Administrasi)</option>
+            </select>
+        </div>
+
+        <button id="btnLiveSync" class="btn-header" style="cursor: pointer; transition: 0.3s;" title="Auto-refresh peta dari database">🔄 Live Sync: OFF</button>
+        <button class="btn-header" style="cursor: default; color: #f87171;">📡 GNSS: DISCONNECTED</button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <label style="color: #64b5f6;">Base Map:</label>
+        <select id="basemapSwitcher" onchange="gantiBasemap()" style="padding: 6px; border-radius: 4px; background: #1e293b; color: white; border: 1px solid #334155;">
+            <option value="osm">OpenStreetMap</option>
+            <option disabled>── Esri ArcGIS ──</option>
+            <option value="esri_imagery">Imagery</option>
+            <option value="esri_imagery_labels">Imagery with Labels</option>
+            <option value="esri_clarity">Clarity</option>
+            <option value="esri_topo">Topographic</option>
+            <option value="esri_terrain">Terrain with Labels</option>
+            <option disabled>── Pilihan Tambahan ──</option>
+            <option value="google_street">Google Maps</option>
+            <option value="google_hybrid">Google Hybrid</option>
+            <option value="dark">Carto Dark Mode</option>
+        </select>
+    </div>
+</div>
+
+<div id="map"></div>
+<div id="koordinat-panel">Lat: -0.000000 | Lng: 0.000000</div>
+
+<!-- FLOATING TOOLBAR dengan semua tools dan label -->
+<div id="floating-toolbar">
+    <button class="btn-float" onclick="document.getElementById('modalQuery').style.display='block'" title="Query SQL"><span class="icon">🔍</span><span class="label">Query</span></button>
+    <button id="btnLokasi" class="btn-float" title="Lokasi Saya"><span class="icon">📍</span><span class="label">Lokasi</span></button>
+    <button class="btn-float" onclick="document.getElementById('modalGnss').style.display='block'" title="Koneksi GNSS"><span class="icon">📡</span><span class="label">GNSS</span></button>
+    <button class="btn-float" onclick="document.getElementById('modalCitra').style.display='block'" title="Masukkan Citra"><span class="icon">🗂️</span><span class="label">Citra</span></button>
+    <button class="btn-float" onclick="document.getElementById('modalShp').style.display='block'" title="Masukkan SHP"><span class="icon">📁</span><span class="label">SHP</span></button>
+    <button class="btn-float" onclick="document.getElementById('modalExport').style.display='block'" title="Export GeoJSON"><span class="icon">📤</span><span class="label">Export</span></button>
+    <button id="btnRouteToggle" class="btn-float" title="Find Route"><span class="icon">🏁</span><span class="label">Rute</span></button>
+    <button id="btnDistanceToggle" class="btn-float" title="Hitung Jarak"><span class="icon">📏</span><span class="label">Jarak</span></button>
+    <button id="btnHapusShp" class="btn-float" onclick="document.getElementById('modalHapusShp').style.display='block'" title="Hapus Layer SHP"><span class="icon">🗑️</span><span class="label">Hapus</span></button>
+</div>
+
+<div id="toc-sidebar">
+    <div class="toc-header">📚 Table of Contents</div>
+    
+    <div class="toc-card">
+        <div class="toc-card-title">🔮 Database: 🛣️ Jalan</div>
+        <div class="toc-controls">
+            <button class="btn-toc-action btn-hide" onclick="toggleLayerVis('jalan', this)">👁️ Sembunyi</button>
+            <button class="btn-toc-action btn-zoom" onclick="zoomKeLayer('jalan')">🔍 Zoom</button>
+            <button class="btn-toc-action btn-style" onclick="gantiWarnaLive('jalan')">🎨 Style</button>
+        </div>
+        <div class="simbol-container">
+            <div class="color-box" id="simbol-jalan" style="background-color: #e11d48;"></div>
+            <span>Simbol Data 🛣️ Jalan</span>
+        </div>
+        <div class="toc-slider-container">
+            Transparansi:<input type="range" class="slider" min="0" max="1" step="0.1" value="1" oninput="ubahOpacity('jalan', this.value)">
+        </div>
+    </div>
+
+    <div class="toc-card">
+        <div class="toc-card-title">🔮 Database: 🟩 Landuse</div>
+        <div class="toc-controls">
+            <button class="btn-toc-action btn-hide" onclick="toggleLayerVis('landuse', this)">👁️ Sembunyi</button>
+            <button class="btn-toc-action btn-zoom" onclick="zoomKeLayer('landuse')">🔍 Zoom</button>
+            <button class="btn-toc-action btn-style" onclick="gantiWarnaLive('landuse')">🎨 Style</button>
+        </div>
+        <div class="simbol-container">
+            <div class="color-box" id="simbol-landuse" style="background-color: #22c55e;"></div>
+            <span>Simbol Data 🟩 Landuse</span>
+        </div>
+        <div class="toc-slider-container">
+            Transparansi:<input type="range" class="slider" min="0" max="1" step="0.1" value="1" oninput="ubahOpacity('landuse', this.value)">
+        </div>
+    </div>
+
+    <div class="toc-card">
+        <div class="toc-card-title">🔮 Database: 🗼 Tower</div>
+        <div class="toc-controls">
+            <button class="btn-toc-action btn-hide" onclick="toggleLayerVis('tower', this)">👁️ Sembunyi</button>
+            <button class="btn-toc-action btn-zoom" onclick="zoomKeLayer('tower')">🔍 Zoom</button>
+            <button class="btn-toc-action btn-style" onclick="gantiWarnaLive('tower')">🎨 Style</button>
+        </div>
+        <div class="simbol-container">
+            <div class="color-box" id="simbol-tower" style="background-color: #f59e0b;"></div>
+            <span>Simbol Data 🗼 Tower</span>
+        </div>
+        <div class="toc-slider-container">
+            Transparansi:<input type="range" class="slider" min="0" max="1" step="0.1" value="1" oninput="ubahOpacity('tower', this.value)">
+        </div>
+    </div>
+
+    <div class="toc-card">
+        <div class="toc-card-title">🔮 Database: 🗺️ Wilayah</div>
+        <div class="toc-controls">
+            <button class="btn-toc-action btn-hide" onclick="toggleLayerVis('wilayah', this)">👁️ Sembunyi</button>
+            <button class="btn-toc-action btn-zoom" onclick="zoomKeLayer('wilayah')">🔍 Zoom</button>
+            <button class="btn-toc-action btn-style" onclick="gantiWarnaLive('wilayah')">🎨 Style</button>
+        </div>
+        <div class="simbol-container">
+            <div class="color-box" id="simbol-wilayah" style="background-color: #38bdf8;"></div>
+            <span>Simbol Data 🗺️ Wilayah</span>
+        </div>
+        <div class="toc-slider-container">
+            Transparansi:<input type="range" class="slider" min="0" max="1" step="0.1" value="1" oninput="ubahOpacity('wilayah', this.value)">
+        </div>
+    </div>
+
+    <div class="toc-card" style="border-color:#f59e0b;">
+        <div class="toc-card-title" style="color:#fcd34d;">🔮 Database: 🏞️ Poligon</div>
+        <div class="toc-controls">
+            <button class="btn-toc-action btn-hide" onclick="toggleLayerVis('shp_poligon', this)">👁️ Sembunyi</button>
+            <button class="btn-toc-action btn-zoom" onclick="zoomKeLayer('shp_poligon')">🔍 Zoom</button>
+            <button class="btn-toc-action btn-style" onclick="gantiWarnaLive('shp_poligon')">🎨 Style</button>
+        </div>
+        <div class="simbol-container">
+            <div class="color-box" id="simbol-shp_poligon" style="background-color: #f59e0b;"></div>
+            <span>Simbol Data 🏞️ Poligon</span>
+        </div>
+        <div class="toc-slider-container">
+            Transparansi:<input type="range" class="slider" min="0" max="1" step="0.1" value="1" oninput="ubahOpacity('shp_poligon', this.value)">
+        </div>
+    </div>
+
+    <div class="toc-card" style="border-color:#3b82f6;">
+        <div class="toc-card-title" style="color:#93c5fd;">🛣️ Layer: SHP Garis</div>
+        <div class="toc-controls">
+            <button class="btn-toc-action btn-hide" onclick="toggleLayerVis('shp_garis', this)">👁️ Sembunyi</button>
+            <button class="btn-toc-action btn-zoom" onclick="zoomKeLayer('shp_garis')">🔍 Zoom</button>
+            <button class="btn-toc-action btn-style" onclick="gantiWarnaLive('shp_garis')">🎨 Style</button>
+        </div>
+        <div class="simbol-container">
+            <div class="color-box" id="simbol-shp_garis" style="background-color: #3b82f6;"></div>
+            <span>Simbol Data 🛣️ Garis</span>
+        </div>
+        <div class="toc-slider-container">
+            Transparansi:<input type="range" class="slider" min="0" max="1" step="0.1" value="1" oninput="ubahOpacity('shp_garis', this.value)">
+        </div>
+    </div>
+
+    <div class="toc-card" style="border-color:#ef4444;">
+        <div class="toc-card-title" style="color:#fca5a5;">📍 Layer: SHP Titik</div>
+        <div class="toc-controls">
+            <button class="btn-toc-action btn-hide" onclick="toggleLayerVis('shp_titik', this)">👁️ Sembunyi</button>
+            <button class="btn-toc-action btn-zoom" onclick="zoomKeLayer('shp_titik')">🔍 Zoom</button>
+            <button class="btn-toc-action btn-style" onclick="gantiWarnaLive('shp_titik')">🎨 Style</button>
+        </div>
+        <div class="simbol-container">
+            <div class="color-box" id="simbol-shp_titik" style="background-color: #ef4444;"></div>
+            <span>Simbol Data 📍 Titik</span>
+        </div>
+        <div class="toc-slider-container">
+            Transparansi:<input type="range" class="slider" min="0" max="1" step="0.1" value="1" oninput="ubahOpacity('shp_titik', this.value)">
+        </div>
+    </div>
+</div>
+
+<div id="modalExport" class="modal-overlay">
+    <div class="modal-box" style="border-color: #fbbf24;">
+        <div class="modal-box-header" style="border-bottom-color: #fbbf24;">
+            <span style="color: #fbbf24;">📤 Export Layer ke GeoJSON / KML</span>
+            <span onclick="document.getElementById('modalExport').style.display='none'" style="cursor:pointer">&times;</span>
+        </div>
+        <div class="modal-box-body">
+            <label>Pilih Layer / Tabel yang ingin diexport:</label>
+            <select id="exportTableSelect" class="modal-input" style="cursor:pointer;">
+                <option value="jalan">🛣️ Jalan</option>
+                <option value="landuse">🟩 Landuse</option>
+                <option value="tower">🗼 Tower</option>
+                <option value="wilayah">🗺️ Wilayah</option>
+                <option value="shp_poligon">🏞️ SHP Poligon (Administrasi)</option>
+                <option value="shp_garis">🛣️ SHP Garis</option>
+                <option value="shp_titik">📍 SHP Titik</option>
+            </select>
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <button class="modal-btn" style="background:#d97706; flex:1;" onclick="eksekusiExportGeoJSON()">GEOJSON 📥</button>
+                <button class="modal-btn" style="background:#0ea5e9; flex:1;" onclick="eksekusiExportKML()">KML 📥</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="route-panel" class="side-panel">
+    <h4 style="margin: 0 0 10px 0; color: #38bdf8;">📍 Rute Terpendek</h4>
+    <div id="route-info" style="font-size: 13px; line-height: 1.6;">Klik 2 titik di peta...</div>
+    <button id="btnResetRoute" style="width: 100%; margin-top: 12px; padding: 8px; background: #ef4444; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: bold;">HAPUS RUTE</button>
+</div>
+<div id="distance-panel" class="side-panel">
+    <h4 style="margin: 0 0 10px 0; color: #c084fc;">📏 Hitung Jarak</h4>
+    <div id="distance-info" style="font-size: 13px; line-height: 1.6;">Klik titik-titik di peta...</div>
+    <button id="btnResetDistance" style="width: 100%; margin-top: 12px; padding: 8px; background: #ef4444; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: bold;">HAPUS JARAK</button>
+</div>
+
+<div id="modalShp" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-box-header"><span>📁 Masukkan Shapefile (Simpan DB)</span><span onclick="document.getElementById('modalShp').style.display='none'" style="cursor:pointer">&times;</span></div>
+        <div class="modal-box-body">
+            <label>Pilih File ZIP (.shp, .dbf, .shx):</label><input type="file" id="fileShp" class="modal-input" accept=".zip">
+            <label>Nama Pengupload:</label><input type="text" id="namaUploader" class="modal-input" placeholder="Masukkan nama Anda...">
+            <label style="margin-top: 12px; display: block; font-weight: bold; color: #38bdf8;">📊 Pilih Tipe Geometri:</label>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <label><input type="radio" name="shpGeomType" value="auto" checked> Auto-Deteksi</label>
+                <label><input type="radio" name="shpGeomType" value="Polygon"> 🗺️ Poligon</label>
+                <label><input type="radio" name="shpGeomType" value="LineString"> 🛣️ Garis</label>
+                <label><input type="radio" name="shpGeomType" value="Point"> 📍 Titik</label>
+            </div>
+            <button class="modal-btn" id="btnProsesShp" style="width:100%; background:#3b82f6;" onclick="prosesSHPPermanen()">EKSTRAK & SIMPAN 🚀</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalGnss" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-box-header"><span>📡 Koneksi GNSS RTK</span><span onclick="document.getElementById('modalGnss').style.display='none'" style="cursor:pointer">&times;</span></div>
+        <div class="modal-box-body">
+            <label>MAC Address GNSS (Bluetooth):</label><input type="text" class="modal-input" placeholder="00:11:22:33:44:55">
+            <label>IP NTRIP Caster (cth: SRGI):</label><input type="text" class="modal-input" placeholder="103.22.x.x">
+            <div style="display:flex; gap:10px;"><div style="flex:1"><label>Port:</label><input type="text" class="modal-input" placeholder="2101"></div><div style="flex:1"><label>Mountpoint:</label><input type="text" class="modal-input" placeholder="RTCM32"></div></div>
+            <div style="display:flex; gap:10px;"><div style="flex:1"><label>Username:</label><input type="text" class="modal-input" placeholder="username"></div><div style="flex:1"><label>Password:</label><input type="password" class="modal-input" placeholder="password"></div></div>
+            <div class="modal-btn-group"><button class="modal-btn" style="background:#22c55e;" onclick="alert('Mencoba menghubungkan GNSS...');">HUBUNGKAN</button><button class="modal-btn" style="background:#ef4444;" onclick="document.getElementById('modalGnss').style.display='none'">PUTUS</button></div>
+        </div>
+    </div>
+</div>
+
+<div id="modalCitra" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-box-header"><span>🗂️ Masukkan Citra & Georeference</span><span onclick="document.getElementById('modalCitra').style.display='none'" style="cursor:pointer">&times;</span></div>
+        <div class="modal-box-body">
+            <label>1. Pilih File Gambar (JPG / PNG):</label><input type="file" class="modal-input" accept=".jpg,.jpeg,.png">
+            <label>2. Pilih World File (JGW / PGW):</label><input type="file" class="modal-input">
+            <button class="modal-btn" style="width:100%; background:#8b5cf6;" onclick="alert('Masa pengembangan...');">PROSES & TAMPILKAN 🚀</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalHapusShp" class="modal-overlay">
+    <div class="modal-box" style="border-color: #ef4444;">
+        <div class="modal-box-header" style="border-bottom-color: #ef4444;"><span style="color: #ef4444;">🗑️ Hapus Layer SHP Permanen</span><span onclick="document.getElementById('modalHapusShp').style.display='none'" style="cursor:pointer">&times;</span></div>
+        <div class="modal-box-body">
+            <label>Pilih Layer SHP yang akan dihapus:</label><select id="delShpList" class="modal-input"><option value="">-- Memuat data layer... --</option></select>
+            <button class="modal-btn" style="background:#ef4444; width:100%;" onclick="eksekusiHapusShp()">HAPUS LAYER SHP 💥</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalQuery" class="modal-overlay">
+    <div class="modal-sql">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 15px;"><h3 style="margin: 0; color: #38bdf8;">🔍 SQL Console (PostGIS)</h3><span id="closeModal" style="cursor: pointer; font-size: 24px;">&times;</span></div>
+        <div style="margin-bottom: 15px;">
+            <button id="btnQJalan" class="btn-query-nav">List Jalan</button><button id="btnQWilayah" class="btn-query-nav">Wilayah</button><button id="btnQTower" class="btn-query-nav">Tower</button><button id="btnQLanduse" class="btn-query-nav">Landuse</button>
+            <button id="btnQShpPoligon" class="btn-query-nav" style="border-color:#f59e0b; color:#f59e0b;">SHP Poligon</button><button id="btnQShpGaris" class="btn-query-nav" style="border-color:#3b82f6; color:#3b82f6;">SHP Garis</button><button id="btnQShpTitik" class="btn-query-nav" style="border-color:#ef4444; color:#ef4444;">SHP Titik</button><button id="btnQAnalisis" class="btn-query-nav" style="border-color:#10b981; color:#10b981;">📊 Analisis Jalan</button>
+        </div>
+        <textarea id="sqlInput" style="width: 100%; height: 100px; background: #1e293b; color: #34d399; padding: 12px; font-family: monospace; border-radius: 5px; margin-bottom: 15px; border: none;"></textarea>
+        <div style="display: flex; gap: 10px;"><button id="runQuery" style="flex: 1; padding: 12px; background: #22c55e; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">RUN QUERY ⚡</button><button id="resetQuery" style="flex: 1; padding: 12px; background: #ef4444; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">RESET 🧹</button></div>
+        <div id="queryStatus" style="margin-top: 10px; font-size: 13px;"></div>
+        <div style="max-height: 250px; overflow-y: auto; background: #0f172a;"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tokml@0.1.2/index.js"></script>
+
+<script>
+    var map = L.map('map', { preferCanvas: true, zoomControl: false }).setView([-5.3971, 105.2668], 10);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    
+    var basemaps = {
+        osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
+        esri_imagery: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
+        esri_clarity: L.tileLayer('https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
+        esri_topo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'),
+        esri_terrain: L.layerGroup([
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}'),
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Reference_Overlay/MapServer/tile/{z}/{y}/{x}')
+        ]),
+        google_street: L.tileLayer('http://{s}.google.com/vt?lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'] }),
+        google_hybrid: L.tileLayer('http://{s}.google.com/vt?lyrs=s,h&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'] }),
+        dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png')
+    };
+
+    var currentBasemap = basemaps.osm;
+    currentBasemap.addTo(map);
+
+    function gantiBasemap() {
+        var p = document.getElementById('basemapSwitcher').value;
+        map.removeLayer(currentBasemap);
+        currentBasemap = basemaps[p];
+        currentBasemap.addTo(map);
+    }
+
+    map.pm.addControls({ position: 'topright', drawMarker: true, drawCircleMarker: true, drawPolyline: true, drawRectangle: true, drawPolygon: true, drawCircle: true, drawText: true, editMode: true, dragMode: true, cutPolygon: true, removalMode: true });
+    map.pm.setLang('id');
+
+    map.on('mousemove', function(e) { document.getElementById('koordinat-panel').innerHTML = `Lat: ${e.latlng.lat.toFixed(6)} | Lng: ${e.latlng.lng.toFixed(6)}`; });
+
+    var tocSidebar = document.getElementById('toc-sidebar');
+    document.getElementById('btnToggleToc').onclick = function() { 
+        if (tocSidebar.style.display === "none") {
+            tocSidebar.style.display = "block";
+        } else {
+            tocSidebar.style.display = "none";
+        }
+    };
+
+    var layersData = {
+        jalan: L.layerGroup().addTo(map), landuse: L.layerGroup().addTo(map),
+        tower: L.layerGroup().addTo(map), wilayah: L.layerGroup().addTo(map),
+        shp_poligon: L.layerGroup().addTo(map), shp_garis: L.layerGroup().addTo(map), shp_titik: L.layerGroup().addTo(map)
+    };
+
+    function toggleLayerVis(nama, btn) {
+        var lyr = layersData[nama];
+        if (map.hasLayer(lyr)) { map.removeLayer(lyr); btn.innerHTML = "👁️ Tampil"; btn.style.background = "#27ae60"; } 
+        else { map.addLayer(lyr); btn.innerHTML = "👁️ Sembunyi"; btn.style.background = "#e74c3c"; }
+    }
+    
+    function ubahOpacity(nama, val) {
+        layersData[nama].eachLayer(function(layer) {
+            if (layer.setStyle) { layer.setStyle({ opacity: val, fillOpacity: val * 0.4 }); }
+            if (layer.setOpacity) layer.setOpacity(val);
+        });
+    }
+
+    var isLiveSync = false; var syncInterval;
+    function refreshSemuaData() {
+        layersData.jalan.clearLayers(); muatDataPeta('jalan', layersData.jalan, document.getElementById('simbol-jalan').style.backgroundColor);
+        layersData.landuse.clearLayers(); muatDataPeta('landuse', layersData.landuse, document.getElementById('simbol-landuse').style.backgroundColor);
+        layersData.tower.clearLayers(); muatDataPeta('tower', layersData.tower, document.getElementById('simbol-tower').style.backgroundColor);
+        layersData.wilayah.clearLayers(); muatDataPeta('wilayah', layersData.wilayah, document.getElementById('simbol-wilayah').style.backgroundColor);
+        layersData.shp_poligon.clearLayers(); muatDataPeta('shp_poligon', layersData.shp_poligon, document.getElementById('simbol-shp_poligon').style.backgroundColor);
+        layersData.shp_garis.clearLayers(); muatDataPeta('shp_garis', layersData.shp_garis, document.getElementById('simbol-shp_garis').style.backgroundColor);
+        layersData.shp_titik.clearLayers(); muatDataPeta('shp_titik', layersData.shp_titik, document.getElementById('simbol-shp_titik').style.backgroundColor);
+    }
+    
+    document.getElementById('btnLiveSync').onclick = function() {
+        isLiveSync = !isLiveSync;
+        if(isLiveSync) { this.innerHTML = "🔄 Live Sync: ON"; this.style.color = "#22c55e"; this.style.borderColor = "#22c55e"; refreshSemuaData(); syncInterval = setInterval(refreshSemuaData, 5000); } 
+        else { this.innerHTML = "🔄 Live Sync: OFF"; this.style.color = "white"; this.style.borderColor = "#334155"; clearInterval(syncInterval); }
+    };
+
+    var isLokasiAktif = false; var circleLokasi, markerLokasi;
+    document.getElementById('btnLokasi').onclick = function() {
+        if (!isLokasiAktif) { map.locate({setView: true, maxZoom: 16}); this.style.background = "rgba(34, 197, 94, 0.9)"; isLokasiAktif = true; } 
+        else { map.stopLocate(); if(circleLokasi) map.removeLayer(circleLokasi); if(markerLokasi) map.removeLayer(markerLokasi); this.style.background = "rgba(30, 41, 59, 0.85)"; isLokasiAktif = false; }
+    };
+    map.on('locationfound', (e) => {
+        if(circleLokasi) map.removeLayer(circleLokasi); if(markerLokasi) map.removeLayer(markerLokasi);
+        circleLokasi = L.circle(e.latlng, e.accuracy, {color: '#3498db'}).addTo(map); markerLokasi = L.marker(e.latlng).addTo(map).bindPopup("Anda di sini").openPopup();
+    });
+
+    document.getElementById('btnHapusShp').onclick = () => { 
+        document.getElementById('modalHapusShp').style.display='block'; 
+        var dropdown = document.getElementById('delShpList');
+        dropdown.innerHTML = '<option value="">-- Memuat data layer... --</option>';
+        var sql = `SELECT 'shp_poligon' as tabel, nama_layer FROM shp_poligon GROUP BY nama_layer UNION ALL SELECT 'shp_garis', nama_layer FROM shp_garis GROUP BY nama_layer UNION ALL SELECT 'shp_titik', nama_layer FROM shp_titik GROUP BY nama_layer`;
+        
+        fetch('http://localhost:3000/api/run-query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: sql }) })
+        .then(res => res.json()).then(data => {
+            dropdown.innerHTML = '<option value="">-- Pilih Layer SHP --</option>';
+            if(data.data && data.data.length > 0) {
+                data.data.forEach(row => {
+                    var tipe = row.tabel.replace('shp_', '').toUpperCase();
+                    dropdown.innerHTML += `<option value="${row.tabel}|${row.nama_layer}">[${tipe}] ${row.nama_layer}</option>`;
+                });
+            } else { dropdown.innerHTML = '<option value="">-- Tidak ada layer SHP --</option>'; }
+        }).catch(err => { dropdown.innerHTML = '<option value="">-- Error memuat data --</option>'; });
+    };
+
+    function eksekusiHapusShp() {
+        var val = document.getElementById('delShpList').value;
+        if(!val) return alert("Pilih layer SHP dulu!");
+        var arr = val.split('|'); var tabel = arr[0]; var namaLayer = arr[1];
+
+        if(confirm(`AWAS! Hapus semua data di layer "${namaLayer}"?`)) {
+            var sql = `DELETE FROM ${tabel} WHERE nama_layer = '${namaLayer}'`;
+            fetch('http://localhost:3000/api/run-query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: sql }) })
+            .then(res => res.json()).then(data => {
+                if(data.status === 'Success') { alert(`Layer terhapus!`); document.getElementById('modalHapusShp').style.display = 'none'; refreshSemuaData(); } 
+                else { alert("Gagal menghapus: " + data.error); }
+            }).catch(err => alert("Error server!"));
+        }
+    }
+
+    function prosesSHPPermanen() {
+        var fileInput = document.getElementById('fileShp');
+        var uploaderName = document.getElementById('namaUploader').value || 'Admin';
+        var selectedGeomType = document.querySelector('input[name="shpGeomType"]:checked').value;
+        var btn = document.getElementById('btnProsesShp');
+
+        if(fileInput.files.length === 0) return alert("Pilih file ZIP dulu!");
+        var file = fileInput.files[0];
+        var namaLayer = prompt("Beri nama untuk layer SHP ini:", file.name.replace('.zip', ''));
+        if(!namaLayer) return alert("Nama layer harus diisi!");
+
+        var reader = new FileReader();
+        btn.innerHTML = "Mengekstrak... ⏳";
+
+        reader.onload = function(e){
+            shp(e.target.result).then(function(geojson){
+                btn.innerHTML = "Menyimpan ke Database... ⏳";
+                var featuresArray = Array.isArray(geojson) ? geojson[0].features : geojson.features;
+
+                fetch('http://localhost:3000/api/save-shp', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nama_layer: namaLayer, pengupload: uploaderName, features: featuresArray, geom_type: selectedGeomType })
+                }).then(res => res.json()).then(data => {
+                    if(data.status === 'Success') {
+                        alert('SHP Berhasil disimpan permanen ke pgAdmin!');
+                        document.getElementById('modalShp').style.display = 'none';
+                        document.getElementById('fileShp').value = '';
+                        document.getElementById('namaUploader').value = '';
+                        btn.innerHTML = "EKSTRAK & SIMPAN 🚀";
+                        refreshSemuaData();
+                    } else { alert("Gagal Simpan: " + data.error); btn.innerHTML = "EKSTRAK & SIMPAN 🚀"; }
+                }).catch(err => { alert("Error Server!"); console.log(err); btn.innerHTML = "EKSTRAK & SIMPAN 🚀"; });
+            }).catch(function(err){ alert("File ZIP tidak valid!"); btn.innerHTML = "EKSTRAK & SIMPAN 🚀"; });
+        }
+        reader.readAsArrayBuffer(file);
+    }
+
+    var isRouteActive = false; var isDistanceActive = false;
+    var routingControl = null; var startMarker = null, endMarker = null;
+    var distancePoints = []; var distanceLine = L.polyline([], {color: '#c084fc', weight: 5, dashArray: '10, 10'}).addTo(map); var distanceMarkers = L.featureGroup().addTo(map);
+
+    function updateUIState() {
+        document.getElementById('route-panel').style.display = isRouteActive ? "block" : "none";
+        document.getElementById('distance-panel').style.display = isDistanceActive ? "block" : "none";
+        if (!isRouteActive) hapusRute();
+        if (!isDistanceActive) hapusJarak();
+        var mapContainer = document.getElementById('map');
+        if (isRouteActive || isDistanceActive) mapContainer.classList.add('cursor-crosshair');
+        else mapContainer.classList.remove('cursor-crosshair');
+    }
+
+    document.getElementById('btnRouteToggle').onclick = function() { isRouteActive = !isRouteActive; if(isRouteActive) isDistanceActive = false; updateUIState(); };
+    function hapusRute() { if (routingControl) map.removeControl(routingControl); if (startMarker) map.removeLayer(startMarker); if (endMarker) map.removeLayer(endMarker); startMarker = null; endMarker = null; routingControl = null; document.getElementById('route-info').innerHTML = "Klik 2 titik di peta..."; }
+    document.getElementById('btnResetRoute').onclick = hapusRute;
+
+    document.getElementById('btnDistanceToggle').onclick = function() { isDistanceActive = !isDistanceActive; if(isDistanceActive) isRouteActive = false; updateUIState(); };
+    function hapusJarak() { distancePoints = []; distanceLine.setLatLngs([]); distanceMarkers.clearLayers(); document.getElementById('distance-info').innerHTML = "Klik titik-titik di peta..."; }
+    document.getElementById('btnResetDistance').onclick = hapusJarak;
+
+    map.on('click', function(e) {
+        if (isRouteActive) {
+            if (!startMarker) { startMarker = L.marker(e.latlng).addTo(map).bindPopup("Start").openPopup(); } 
+            else if (!endMarker) {
+                endMarker = L.marker(e.latlng).addTo(map).bindPopup("Finish").openPopup();
+                routingControl = L.Routing.control({ waypoints: [startMarker.getLatLng(), endMarker.getLatLng()], lineOptions: { styles: [{ color: '#38bdf8', weight: 6 }] }, createMarker: () => null, show: false }).addTo(map);
+                routingControl.on('routesfound', function(ev) { document.getElementById('route-info').innerHTML = `📏 Jarak: <b>${(ev.routes[0].summary.totalDistance/1000).toFixed(2)} km</b><br>⏱️ Waktu: <b>${Math.round(ev.routes[0].summary.totalTime/60)} menit</b>`; });
+            } 
+            else { hapusRute(); startMarker = L.marker(e.latlng).addTo(map).bindPopup("Start").openPopup(); }
+        } else if (isDistanceActive) {
+            distancePoints.push(e.latlng); distanceLine.setLatLngs(distancePoints);
+            L.circleMarker(e.latlng, {radius: 5, color: '#fff', fillColor: '#c084fc', fillOpacity: 1, weight: 2}).addTo(distanceMarkers);
+            if (distancePoints.length > 1) {
+                var totalMeters = 0; for(var i=0; i<distancePoints.length-1; i++) totalMeters += distancePoints[i].distanceTo(distancePoints[i+1]);
+                document.getElementById('distance-info').innerHTML = `<div style="color:#c084fc;"><b>Total Jarak:</b></div>📏 Meter: <b>${totalMeters.toFixed(2)} m</b><br>📏 Kilometer: <b>${(totalMeters/1000).toFixed(3)} km</b>`;
+            }
+        }
+    });
+
+    map.on('pm:create', async function (e) {
+        var layer = e.layer; 
+        var geojson = (e.shape === 'Circle') ? layer.toGeoJSON() : layer.toGeoJSON();
+        if(e.shape === 'Circle') geojson.properties.radius = layer.getRadius();
+
+        var tabel = document.getElementById('targetTabel').value; var attr = {};
+        var center = (layer.getBounds) ? layer.getBounds().getCenter() : layer.getLatLng();
+        let res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}&zoom=18`);
+        let data = await res.json(); var autoNama = data.address ? (data.address.road || data.address.village || "") : "";
+
+        attr.id = prompt("Masukkan ID (Wajib 2 Digit Angka):", Math.floor(Math.random() * 90 + 10).toString());
+        if(!attr.id) { map.removeLayer(layer); return alert("Batal! ID harus diisi."); }
+
+        if(tabel==='jalan'){ attr.nama_jalan=prompt("Nama Jalan:", autoNama); } 
+        else if(tabel==='landuse'){ attr.penggunaan=prompt("Lahan (SAWAH, PEMUKIMAN, dll):", "PEMUKIMAN"); } 
+        else if(tabel==='wilayah'){ attr.nama_kabupaten=prompt("Nama Kabupaten:", autoNama); attr.nama_bupati="-"; } 
+        else if(tabel==='tower'){ attr.id_provider=prompt("ID Provider (10=Telkomsel, 11=Indosat, dll):", "10"); }
+        else if(tabel.startsWith('shp_')){ attr.nama_layer=prompt("Nama Fitur / Layer SHP:", autoNama); }
+
+        fetch('http://localhost:3000/api/save-feature', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabel: tabel, geometry: geojson.geometry, attr: attr }) })
+        .then(res => res.json()).then(data => { 
+            if(data.status === 'Success') alert("Tersimpan!"); 
+            else { alert("Gagal Simpan: " + data.error); map.removeLayer(layer); }
+        }).catch(err => { alert("Error server: " + err); map.removeLayer(layer); });
+    });
+
+    function muatDataPeta(tabel, layerGroup, warnaLayer) {
+        fetch('http://localhost:3000/api/run-query', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: `SELECT *, ST_AsGeoJSON(geom) as geometry FROM ${tabel}` })
+        }).then(res => res.json()).then(data => {
+            if (data.data) {
+                data.data.forEach(row => {
+                    if (row.geometry) {
+                        let popupHtml = `<div style="color:#0f766e; font-weight:bold; margin-bottom:5px;">[ LAYER_${tabel.toUpperCase()} ]</div><table class="popup-table">`;
+                        for(let key in row) {
+                            if(key !== 'geometry' && key !== 'geom') {
+                                if(key === 'properties' && row[key]) {
+                                    let props = typeof row[key] === 'string' ? JSON.parse(row[key]) : row[key];
+                                    for(let pKey in props) popupHtml += `<tr><td>${pKey}</td><td>: ${props[pKey]}</td></tr>`;
+                                } else { popupHtml += `<tr><td>${key.toUpperCase()}</td><td>: ${row[key] !== null ? row[key] : '-'}</td></tr>`; }
+                            }
+                        }
+                        popupHtml += `</table>`;
+                        
+                        L.geoJSON(JSON.parse(row.geometry), { 
+                            style: function(feature) {
+                                let styleOptions = { color: warnaLayer, weight: 3, fillOpacity: 0.4 };
+                                if (row.geometry.includes("Polygon") || row.geometry.includes("MultiPolygon")) {
+                                    styleOptions.weight = 2;
+                                    styleOptions.fillOpacity = 0.2; 
+                                }
+                                return styleOptions;
+                            }, 
+                            pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 6, fillColor: warnaLayer, color: "#fff", weight: 2, fillOpacity: 0.8 }) 
+                        }).bindPopup(popupHtml).addTo(layerGroup);
+                    }
+                });
+            }
+        }).catch(err => console.log(`Data ${tabel} kosong.`));
+    }
+    
+    muatDataPeta('jalan', layersData.jalan, '#e11d48'); 
+    muatDataPeta('landuse', layersData.landuse, '#22c55e');
+    muatDataPeta('tower', layersData.tower, '#f59e0b'); 
+    muatDataPeta('wilayah', layersData.wilayah, '#38bdf8');
+    muatDataPeta('shp_poligon', layersData.shp_poligon, '#f59e0b'); 
+    muatDataPeta('shp_garis', layersData.shp_garis, '#3b82f6');
+    muatDataPeta('shp_titik', layersData.shp_titik, '#ef4444');
+
+    // Query handler - dengan error handling
+    var queryElement = document.getElementById('btnQuery');
+    if(queryElement) queryElement.onclick = () => document.getElementById('modalQuery').style.display="block";
+    
+    document.getElementById('closeModal').onclick = () => document.getElementById('modalQuery').style.display="none";
+    var layerHasilQuery = L.layerGroup().addTo(map);
+
+    document.getElementById('btnQJalan').onclick = () => document.getElementById('sqlInput').value = "SELECT id_jalan as id, nama_jalan, ST_AsGeoJSON(geom) as geometry FROM jalan";
+    document.getElementById('btnQWilayah').onclick = () => document.getElementById('sqlInput').value = "SELECT id_wilayah as id, nama_kabupaten, nama_bupati, ST_AsGeoJSON(geom) as geometry FROM wilayah";
+    document.getElementById('btnQTower').onclick = () => document.getElementById('sqlInput').value = "SELECT id_tower as id, id_provider, ST_AsGeoJSON(geom) as geometry FROM tower";
+    document.getElementById('btnQLanduse').onclick = () => document.getElementById('sqlInput').value = "SELECT id_landuse as id, penggunaan, ST_AsGeoJSON(geom) as geometry FROM landuse";
+    document.getElementById('btnQShpPoligon').onclick = () => document.getElementById('sqlInput').value = "SELECT id, nama_layer, pengupload, ST_AsGeoJSON(geom) as geometry FROM shp_poligon";
+    document.getElementById('btnQShpGaris').onclick = () => document.getElementById('sqlInput').value = "SELECT id, nama_layer, pengupload, ST_AsGeoJSON(geom) as geometry FROM shp_garis";
+    document.getElementById('btnQShpTitik').onclick = () => document.getElementById('sqlInput').value = "SELECT id, nama_layer, pengupload, ST_AsGeoJSON(geom) as geometry FROM shp_titik";
+    document.getElementById('btnQAnalisis').onclick = () => document.getElementById('sqlInput').value = "SELECT w.nama_kabupaten as wilayah, ROUND((SUM(ST_Length(j.geom::geography))/1000)::numeric, 2) as panjang_km FROM wilayah w JOIN jalan j ON ST_Intersects(w.geom, j.geom) GROUP BY w.nama_kabupaten ORDER BY panjang_km DESC";
+
+    document.getElementById('runQuery').onclick = function() {
+        var sql = document.getElementById('sqlInput').value;
+        if(!sql || sql.trim() === '') { alert('Masukkan SQL query terlebih dahulu!'); return; }
+        
+        fetch('http://localhost:3000/api/run-query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: sql }) })
+        .then(res => res.json()).then(data => {
+            var th = document.getElementById('tableHead'); var tb = document.getElementById('tableBody'); th.innerHTML = ''; tb.innerHTML = '';
+            if(data.data && data.data.length > 0) {
+                var cols = Object.keys(data.data[0]); th.innerHTML = '<tr><th>🗑️</th>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+                data.data.forEach(row => {
+                    var tr = '<tr>'; var dataId = row.id || row.gid;
+                    tr += dataId ? `<td><button onclick="hapusData('${sql}', '${dataId}')" style="background:red; color:white; border:none; border-radius:3px; cursor:pointer;">🗑️</button></td>` : `<td>-</td>`;
+                    cols.forEach(c => {
+                        var v = row[c];
+                        if(c === 'geometry' && v) v = `<button onclick="zoomKeFitur('${encodeURIComponent(v)}')" style="background:#0284c7; color:white; border:none; padding:4px; border-radius:4px; cursor:pointer;">📍 Lihat</button>`;
+                        tr += `<td>${v}</td>`;
+                    }); tb.innerHTML += tr + '</tr>';
+                });
+            }
+        });
+    };
+
+    function zoomKeFitur(enc) { layerHasilQuery.clearLayers(); var tempLayer = L.geoJSON(JSON.parse(decodeURIComponent(enc)), {style:{color:'yellow', weight:5}}).addTo(layerHasilQuery); map.flyToBounds(tempLayer.getBounds(), {padding:[50,50], maxZoom:17}); document.getElementById('modalQuery').style.display = "none"; }
+    function hapusData(sql, id) { var t = sql.includes("shp_poligon") ? "shp_poligon" : sql.includes("shp_garis") ? "shp_garis" : sql.includes("shp_titik") ? "shp_titik" : sql.includes("jalan")?"jalan":sql.includes("tower")?"tower":sql.includes("wilayah")?"wilayah":"landuse"; if(confirm("Hapus?")) fetch('http://localhost:3000/api/delete-feature', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tabel:t, id:id}) }).then(() => document.getElementById('runQuery').click()); }
+    document.getElementById('resetQuery').onclick = () => { document.getElementById('sqlInput').value = ""; document.getElementById('tableBody').innerHTML = ""; layerHasilQuery.clearLayers(); };
+
+    function eksekusiExportGeoJSON() {
+        var tabel = document.getElementById('exportTableSelect').value;
+        window.location.href = `http://localhost:3000/api/export-geojson/${tabel}`;
+        document.getElementById('modalExport').style.display = 'none';
+    }
+
+    function eksekusiExportKML() {
+        var tabel = document.getElementById('exportTableSelect').value;
+        var layer = layersData[tabel];
+        if (!layer || layer.getLayers().length === 0) {
+            alert('Layer kosong! Tidak ada data untuk diexport.');
+            return;
+        }
+        
+        // Ubah layer ke GeoJSON dulu
+        var geojson = { type: 'FeatureCollection', features: [] };
+        layer.eachLayer(function(l) {
+            if (l.feature) geojson.features.push(l.feature);
+        });
+        
+        // Gunakan tokml untuk convert ke KML
+        var kml = tokml(geojson);
+        
+        // Download file
+        var blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+        var url = window.URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = `${tabel}_${new Date().toISOString().split('T')[0]}.kml`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        document.getElementById('modalExport').style.display = 'none';
+    }
+
+    function zoomKeLayer(nama) {
+        var bounds = L.latLngBounds();
+        layersData[nama].eachLayer(function(layer) {
+            if (layer.getBounds) bounds.extend(layer.getBounds());
+            else if (layer.getLatLng) bounds.extend(layer.getLatLng());
+        });
+        if (bounds.isValid()) map.flyToBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+        else alert(`Layer ${nama.toUpperCase()} tidak memiliki objek aktif di peta!`);
+    }
+
+    function gantiWarnaLive(nama) {
+        var picker = document.createElement('input'); picker.type = 'color';
+        picker.value = rgbToHex(document.getElementById(`simbol-${nama}`).style.backgroundColor);
+        picker.onchange = function() {
+            var warnaBaru = picker.value;
+            document.getElementById(`simbol-${nama}`).style.backgroundColor = warnaBaru;
+            layersData[nama].eachLayer(layer => { if (layer.setStyle) layer.setStyle({ color: warnaBaru, fillColor: warnaBaru }); });
+        };
+        picker.click();
+    }
+    
+    function rgbToHex(rgb) { if(!rgb || rgb.startsWith("#")) return rgb || "#3498db"; var a = rgb.match(/\d+/g); return "#" + ((1 << 24) + (parseInt(a[0]) << 16) + (parseInt(a[1]) << 8) + parseInt(a[2])).toString(16).slice(1); }
+</script>
+</body>
+</html>
